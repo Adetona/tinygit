@@ -87,7 +87,7 @@ async function prService(res, args) {
      }
 
     if (gitServiceName.stdout.includes("github")) {
-       //github incoming
+       //github pr incoming ..
     }
 
 
