@@ -4,7 +4,7 @@ const { program } = require('commander')
 const {config, prService} = require('./bin/tinygit')
 
 program
-    .command('add')
+    .command('config')
     .description('Add git access token.')
     .option('-github, -github [value]')
     .option('-gitlab, -gitlab [value]')
@@ -15,7 +15,7 @@ program
     .description('Make Pull request.')
     .option('-b, -branch [value]')
     .option('-t, -title [value]')
-    .option('-d, -description [value]')
+   // .option('-d, -description [value]')
     .action(prService)
 
 

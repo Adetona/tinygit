@@ -1,6 +1,6 @@
 var inquirer = require('inquirer');
 const storage = require('node-persist');
-const {repoName, branchName, gitService} = require('../utils/exec')
+const { repoName, branchName, gitService, githubUserName} = require('../utils/exec')
 const axios = require('axios')
 const emoji = require('node-emoji');
 
@@ -20,7 +20,7 @@ async function config(res, args){
         } else {    
             await storage.init( /* options ... */)
             await storage.setItem('gitlab', args._optionValues.Gitlab)
-            console.log('Gitlab token successfully saved!')
+            console.log('Gitlab token successfully saved!!')
         }
 
     }
@@ -31,7 +31,7 @@ async function config(res, args){
         if (args._optionValues.Github == true) {
             console.log('Please add your Gitlab access token. Create token here: https://gitlab.com/-/profile/personal_access_tokens')
         }else{
-            console.log('ddd', args._optionValues.Github)
+           
             await storage.init( /* options ... */)
             await storage.setItem('github', args._optionValues.Github)
             console.log("")
@@ -54,6 +54,15 @@ async function prService(res, args) {
 
     let gitServiceName = await gitService()
     
+        //console.log('something went wrong')
+  
+    
+    if (!gitServiceName.stderr){
+        console.log('You are running this command inside a directory that has no git repo. Please check and try again')    
+    }
+
+  
+    if (gitServiceName.stdout){
      if(gitServiceName.stdout.includes("gitlab")){
       
          let gitBbranchName = await branchName()
@@ -88,32 +97,46 @@ async function prService(res, args) {
      }
 
     if (gitServiceName.stdout.includes("github")) {
-
+        console.log('Preparing your PR...')
+        let gitRepoName = await repoName()
+        gitRepoName = gitRepoName.resRepoName.stdout;
+        
         var gitBbranchName = await branchName()
         await storage.init( /* options ... */)
-        const githubToken = await storage.getItem('github')
-       // console.log('brc', args._optionValues.t)
-        let data = { 
-            
-            "head": "dev-test",
-            "base": "main",
-            "title": "PR master"
-    
+        const githubToken = await storage.getItem('github')   
+        
+        let data = {          
+            "head": gitBbranchName.resBranchName.stdout.trim(),
+            "base": args._optionValues.Branch,
+            "title": args._optionValues.Title
         }
     
-        let githubPR = await githubPr(githubToken, data)
-       // console.log('github', githubPR.data.html_url)
+        let githubPR = await githubPr(githubToken, gitRepoName, data)
+       
+        if (githubPR.data && githubPR.data.html_url){
+            console.log(`Your PR is ready ${emoji.get('fire')} ${emoji.get('fire')}`)
+            console.log("")
+            console.log('Pull Request link:')
+            console.log("")
+            console.log(githubPR.data.html_url)
+            console.log("") 
+        }else{
 
-        console.log(`Your PR is ready ${emoji.get('fire')} ${emoji.get('fire')}`)
-        console.log("")
-        console.log('Pull Request link:')
-        console.log("")
-        console.log(githubPR)
-        console.log("") 
+            if (githubPR.response.status == 401){
+                console.log('You have wrong token or token has expired. Create a token here: https://gitlab.com/-/profile/personal_access_tokens')
+            }
+            if (githubPR.response.status == 422){         
+                console.log("ooops! PR already exist or you are making a PR to a non-existent branch. Please check and try again")
+              
+            }
+           
+           
+        }
+       
 
     }
 
-
+    }
 }
 
 
@@ -164,7 +187,7 @@ async function projectId(token, gitRepoName) {
 
 
 async function gitlabPr(token, repoId, data){
-
+    
     try {
         const url1 = `https://gitlab.com/api/v4/projects/${repoId}/merge_requests`
         const gitPr = await axios.post(url1, data, {
@@ -184,24 +207,21 @@ async function gitlabPr(token, repoId, data){
 }
 
 
-async function githubPr(token, data) {
+async function githubPr(token, gitRepoName, data) {
 
     try {
+        var githubUserName1 = await githubUserName()
        
-       
-        const url1 = `https://api.github.com/repos/Adetona/tinygit/pulls`
+        
+        const url1 = `https://api.github.com/repos/${githubUserName1.stdout.trim()}/${gitRepoName.trim()}/pulls`
         const gitPr = await axios.post(url1, data, {
             headers: {
                 "Authorization": `token ${token}`
             }
         })
 
-        console.log('gitpr', gitPr)
-
         return gitPr
     } catch (error) {
-       
-        //  console.log('error', error.response.data.error)
         return error
     }
 
