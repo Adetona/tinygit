@@ -15,7 +15,6 @@ program
     .description('Make Pull request.')
     .option('-b, -branch [value]')
     .option('-t, -title [value]')
-   // .option('-d, -description [value]')
     .action(prService)
 
 

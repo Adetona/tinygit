@@ -3,6 +3,9 @@ const storage = require('node-persist');
 const { repoName, branchName, gitService, githubUserName} = require('../utils/exec')
 const axios = require('axios')
 const emoji = require('node-emoji');
+var keychain = require('keychain');
+const keytar = require('keytar')
+var osType = process.platform;
 
 async function config(res, args){
   
@@ -12,15 +15,24 @@ async function config(res, args){
         console.log("Please specify the right provider's name. eg: tinygit config -github <token> or  tinygit config -gitlab <token>")
        
     }
- 
+   
+
     if (args._optionValues.Gitlab){
 
         if (args._optionValues.Gitlab == true) {
             console.log('Please add your Gitlab access token. Create token here: https://gitlab.com/-/profile/personal_access_tokens')
         } else {    
-            await storage.init( /* options ... */)
-            await storage.setItem('gitlab', args._optionValues.Gitlab)
-            console.log('Gitlab token successfully saved!!')
+           
+            if (osType == "darwin"){
+                await keytar.setPassword("tinygitlab", "tinygitlab", args._optionValues.Gitlab)
+                console.log(`Gitlab token successfully saved. Tinygit is ready for use ${emoji.get('rocket')}`) 
+              
+            }else{
+                await storage.init( /* options ... */)
+                await storage.setItem('tinygitlab', args._optionValues.Gitlab)
+                console.log(`Gitlab token successfully saved. Tinygit is ready for use ${emoji.get('rocket')}`) 
+            }
+            
         }
 
     }
@@ -31,16 +43,18 @@ async function config(res, args){
         if (args._optionValues.Github == true) {
             console.log('Please add your Gitlab access token. Create token here: https://gitlab.com/-/profile/personal_access_tokens')
         }else{
+
            
-            await storage.init( /* options ... */)
-            await storage.setItem('github', args._optionValues.Github)
-            console.log("")
-            console.log(`Github token successfully saved!. Tinygit is ready for use ${emoji.get('rocket')}`) 
-            console.log("")
-            console.log("Create PR with this command:")
-            console.log("")
-            console.log("tinygit pr -b <branch> -t <PR title> -d <PR description>")
-            console.log("")
+            if (osType == "darwin") {
+                await keytar.setPassword("tinygithub", "tinygithub", args._optionValues.Github)
+                console.log(`Github token successfully saved. Tinygit is ready for use ${emoji.get('rocket')}`) 
+            } else {
+                await storage.init( /* options ... */)
+                await storage.setItem('tinygithub', args._optionValues.Github)
+                console.log(`Github token successfully saved. Tinygit is ready for use ${emoji.get('rocket')}`) 
+            }
+           
+         
             
 
         }
@@ -53,46 +67,54 @@ async function config(res, args){
 async function prService(res, args) {
 
     let gitServiceName = await gitService()
-    
-        //console.log('something went wrong')
-  
-    
-    if (!gitServiceName.stderr){
-        console.log('You are running this command inside a directory that has no git repo. Please check and try again')    
-    }
-
-  
+ 
     if (gitServiceName.stdout){
      if(gitServiceName.stdout.includes("gitlab")){
+         console.log('Preparing your PR...')
       
-         let gitBbranchName = await branchName()
+         let gitlabBranchName = await branchName()
+         gitlabBranchName = gitlabBranchName.resBranchName.stdout
+
          let gitRepoName = await repoName()         
          gitRepoName = gitRepoName.resRepoName.stdout; 
-         gitBbranchName = gitBbranchName.resBranchName.stdout
-         await storage.init( /* options ... */)
-         const token = await storage.getItem('gitlab')
-  
+
+        var token = null; 
+       
+         if (osType == "darwin") {
+           token =  await keytar.getPassword("tinygitlab", "tinygitlab")
+         }else{
+             await storage.init( /* options ... */)
+              token = await storage.getItem('gitlab')
+         }
+        
+        
          let repoId = await projectId(token, gitRepoName)
 
-        // console.log('getreponame', gitRepoName)
-//console.log('repoxx', repoId)
      
 
-         const data = {
-             "source_branch": gitBbranchName.trim(),
+         var data = {
+             "source_branch": gitlabBranchName.trim(),
              "target_branch": args._optionValues.Branch,
              "title": args._optionValues.Title
-             //"description": args._optionValues.description
          }
 
         let pr = await gitlabPr(token, repoId, data)
        
-         console.log(`Your PR is ready ${emoji.get('fire')} ${emoji.get('fire')}`)
-         console.log("") 
-         console.log('Pull Request link:')
-         console.log("")
-         console.log (pr.data.web_url)
-         console.log("") 
+         
+         if (pr.response && pr.response.status == 409){
+             console.log("ooops! PR already exist or you are making a PR to a non-existent branch. Please check and try again")   
+         }else{
+           
+             if(pr.data){
+                 console.log(`Your PR is ready ${emoji.get('fire')} ${emoji.get('fire')}`)
+                 console.log("")
+                 console.log('Pull Request link:')
+                 console.log("")
+                 console.log(pr.data.web_url)
+                 console.log("") 
+             }
+         }
+    
       
      }
 
@@ -102,16 +124,24 @@ async function prService(res, args) {
         gitRepoName = gitRepoName.resRepoName.stdout;
         
         var gitBbranchName = await branchName()
-        await storage.init( /* options ... */)
-        const githubToken = await storage.getItem('github')   
+
+        var githubToken = null;
+        if (osType == "darwin") {
+            githubToken = await keytar.getPassword("tinygithub", "tinygithub")
+        } else {
+            await storage.init( /* options ... */)
+            githubToken = await storage.getItem('gitlab')
+        }
+
+       
         
-        let data = {          
+        var githubData = {          
             "head": gitBbranchName.resBranchName.stdout.trim(),
             "base": args._optionValues.Branch,
             "title": args._optionValues.Title
         }
     
-        let githubPR = await githubPr(githubToken, gitRepoName, data)
+        let githubPR = await githubPr(githubToken, gitRepoName, githubData)
        
         if (githubPR.data && githubPR.data.html_url){
             console.log(`Your PR is ready ${emoji.get('fire')} ${emoji.get('fire')}`)
@@ -123,7 +153,7 @@ async function prService(res, args) {
         }else{
 
             if (githubPR.response.status == 401){
-                console.log('You have wrong token or token has expired. Create a token here: https://gitlab.com/-/profile/personal_access_tokens')
+                console.log('You have wrong token or token has expired. Create a token here: https://github.com/settings/tokens')
             }
             if (githubPR.response.status == 422){         
                 console.log("ooops! PR already exist or you are making a PR to a non-existent branch. Please check and try again")
@@ -136,6 +166,8 @@ async function prService(res, args) {
 
     }
 
+    }else{ 
+        console.log('You are running this command inside a directory that has no git repo. Please check and try again')
     }
 }
 
@@ -149,39 +181,22 @@ async function projectId(token, gitRepoName) {
             }
         })
      
-     var ID = response.data.map(function (x) {
+     var searchIds = response.data.map(function (x) {
          var y;
-            if (x.name == gitRepoName.trim()){
-                
+            if (x.name == gitRepoName.trim()){            
              y = x
              
-            }
-            
+            }         
         return y
     
         });
 
-        var ID2 = ID.map(function (x1) {
-           // console.log('x11', x1)
-            var hj;
-           if(x1 && x1 != ""){
-              // console.log("xcov", x1)
-                hj = x1.id
-           }
+        var gitlabProjectId = searchIds.filter(item => item);
 
-           return hj; 
-
-        });
-
-       // var j = ID.filter(item => item);
-        //console.log('jkh', j[0].id)
-       // console.log('rrr1', ID2)
-        var j = ID.filter(item => item);
-
-       // console.log('uycs1', j[0].id)
-        return j[0].id
+       
+        return gitlabProjectId[0].id
     } catch (error) {
-        console.error(error);
+        //console.error(error);
     }
 }
 
@@ -198,7 +213,6 @@ async function gitlabPr(token, repoId, data){
      
         return gitPr
     } catch (error) {
-      //  console.log('rxt', error)
       //  console.log('error', error.response.data.error)
         return error
     }

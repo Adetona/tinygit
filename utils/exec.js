@@ -15,7 +15,7 @@ var branchName = async function branchName(){
 }
 
 //get git service name
-var gitService = async function seviceName(){
+var gitService = async function serviceName(){
    try{
        const resGitService = await exec('git config --get remote.origin.url')
         return resGitService; 
@@ -38,7 +38,10 @@ var githubUserName = async function githubUserName() {
 
 }
 
-module.exports.repoName = repoName
-module.exports.branchName = branchName
-module.exports.gitService = gitService
-module.exports.githubUserName = githubUserName 
+module.exports = {
+    repoName,
+    branchName,
+    gitService,
+    githubUserName
+
+}
